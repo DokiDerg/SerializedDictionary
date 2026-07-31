@@ -372,6 +372,7 @@ namespace AYellowpaper.SerializedCollections.Editor
                 SCEditorUtility.AddGenericMenuItem(gm, false, ListProperty.minArraySize > 0, new GUIContent("Clear"), () => QueueAction(ClearList));
                 SCEditorUtility.AddGenericMenuItem(gm, false, true, new GUIContent("Remove Conflicts"), () => QueueAction(RemoveConflicts));
                 SCEditorUtility.AddGenericMenuItem(gm, false, _keyGeneratorsWithWindow.Count > 0, new GUIContent("Bulk Edit..."), () => OpenKeysGeneratorSelectorWindow(screenRect));
+                SCEditorUtility.AddGenericMenuItem(gm, false, ListProperty.arraySize > 0, new GUIContent("Sort Enum By Value"), () => QueueAction(SortByValue));
                 if (_keyGeneratorsWithoutWindow.Count > 0)
                 {
                     gm.AddSeparator(string.Empty);
@@ -401,6 +402,44 @@ namespace AYellowpaper.SerializedCollections.Editor
             window.Initialize(_keyGeneratorsWithWindow, _keyFieldInfo.FieldType);
             window.ShowAsDropDown(rect, new Vector2(400, 200));
             window.OnApply += ApplyPopulatorQueued;
+        }
+
+        private void SortByValue() {
+            // This is a quickly put together sorting system,
+            // but it gets the job done until a better version can be made.
+            // As this gets ran very rarely,
+            // and usually only has a few values to sort (primarely from Populate Enum),
+            // I do not see it becoming a problem.
+
+            // I am unsure if this works with negative enum values
+            // This was tested on a uint enum
+            Debug.Log("Sorting enum...");
+        restart:
+            List<ulong> cachedList = new List<ulong>();
+            for (int i = 0; i < ListProperty.arraySize; i++) {
+                var element = ListProperty.GetArrayElementAtIndex(i); // Get the target element
+                object rawValue = element.boxedValue; // Gets the KeyValuePair value
+                var type = rawValue.GetType(); // AYellowpaper.SerializedCollections.SerializedKeyValuePair<..., ...>
+                var generics = type.GetGenericArguments(); // Type[] { TKey, TValue }
+
+                if (generics[0].IsEnum) { // Checks if this is an enum
+                    var key = type.GetField("Key"); // Gets the field, to retrieve its value
+                    var keyValue = key.GetValue(rawValue); // Retrieves the key value
+                    var number = Convert.ToUInt64(keyValue); // Gets the enum's number as a ulong
+
+                    int _i = 0;
+                    foreach (var item in cachedList) { // Itterate through the previous items
+                        if (item > number) { // Check if a previous number is bigger than the current
+                            ListProperty.MoveArrayElement(i, _i); // Fix the current numbers position
+                            goto restart; // Restart sorting to ensure we dont skip a value
+                        }
+                        _i++;
+                    }
+                    cachedList.Add(number); // Cache the value
+                }
+            }
+            ListProperty.serializedObject.ApplyModifiedProperties(); // Apply the final values
+            Debug.Log("Enum has been sorted!");
         }
 
         private void ToggleAlwaysShowSearchPropertyData()
